@@ -1,1 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track Order — CryptoMart</title>
+<style>
+:root {
+    --primary: #6c5ce7;
+    --primary-dark: #5a4bd1;
+    --secondary: #00cec9;
+    --dark: #2d3436;
+    --light: #f8f9fa;
+    --gray: #636e72;
+    --gray-light: #dfe6e9;
+    --success: #00b894;
+    --danger: #e17055;
+    --shadow: 0 8px 32px rgba(0,0,0,0.12);
+    --radius: 16px;
+    --radius-sm: 8px;
+    --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); background:var(--light); color:var(--dark); min-height:100vh; }
 
+.track-nav {
+    background:#fff; padding:16px 24px; display:flex; align-items:center; gap:12px;
+    border-bottom:1px solid var(--gray-light); box-shadow:0 2px 8px rgba(0,0,0,0.04);
+}
+.track-nav a { color:var(--primary); font-weight:600; font-size:0.9rem; text-decoration:none; }
+.track-nav a:hover { text-decoration:underline; }
+.track-nav .logo {
+    font-size:1.3rem; font-weight:800;
+    background:linear-gradient(135deg,var(--primary),var(--secondary));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    margin-right:auto;
+}
+
+.track-container { max-width:680px; margin:40px auto; padding:0 20px; }
+.track-card {
+    background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:36px 32px; animation:fadeUp 0.5s ease;
+}
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+.track-card h1 { font-size:1.6rem; font-weight:700; margin-bottom:4px; }
+.track-card .subtitle { color:var(--gray); font-size:0.9rem; margin-bottom:24px; }
+.track-card .search-box {
+    display:flex; border:2px solid var(--gray-light);
+    border-radius:var(--radius-sm); overflow:hidden; margin-bottom:24px;
+}
+.track-card .search-box input { flex:1; padding:12px 16px; border:none; outline:none; font-size:0.95rem; }
+.track-card .search-box button { padding:12px 24px; border:none; background:var(--primary); color:#fff; font-weight:600; cursor:pointer; transition:var(--transition); }
+.track-card .search-box button:hover { background:var(--primary-dark); }
+
+.result { display:none; }
+.result.show { display:block; animation:fadeUp 0.4s ease; }
+.result .tracking-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; padding-bottom:16px; border-bottom:2px solid var(--gray-light); }
+.result .tracking-header .track-num { font-size:1.2rem; font-weight:700; color:var(--primary); letter-spacing:1px; }
+.result .tracking-header .status-badge { padding:6px 14px; border-radius:50px; font-size:0.8rem; font-weight:600; }
+.status-badge.pending { background:rgba(253,203,110,0.2); color:#e17055; }
+.status-badge.processing { background:rgba(108,92,231,0.12); color:var(--primary); }
+.status-badge.shipped { background:rgba(0,184,148,0.12); color:var(--success); }
+.status-badge.cancelled { background:rgba(225,112,85,0.12); color:var(--danger); }
+
+.timeline { position:relative; padding-left:28px; margin:20px 0; }
+.timeline::before { content:''; position:absolute; left:8px; top:0; bottom:0; width:2px; background:var(--gray-light); }
+.timeline-item { position:relative; margin-bottom:20px; padding-left:16px; }
+.timeline-item::before { content:''; position:absolute; left:-24px; top:4px; width:14px; height:14px; border-radius:50%; background:var(--gray-light); border:2px solid #fff; }
+.timeline-item.active::before { background:var(--primary); box-shadow:0 0 0 3px rgba(108,92,231,0.2); }
+.timeline-item.completed::before { background:var(--success); }
+.timeline-item .time-label { font-size:0.75rem; color:var(--gray); }
+.timeline-item .event { font-weight:600; font-size:0.9rem; }
+.timeline-item .desc { font-size:0.85rem; color:var(--gray); }
+
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; padding-top:16px; border-top:2px solid var(--gray-light); }
+.info-grid .field label { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray); font-weight:600; }
+.info-grid .field .value { font-weight:600; font-size:0.95rem; }
+.info-grid .field .value.items-list { font-weight:400; font-size:0.85rem; }
+
+.not-found { text-align:center; padding:40px 0; color:var(--gray); display:none; }
+.not-found.show { display:block; }
+.not-found h3 { font-size:1.2rem; margin-bottom:8px; color:var(--dark); }
+
+@media (max-width:480px) {
+    .track-card { padding:24px 16px; }
+    .info-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="track-nav">
+    <span class="logo">&#x1f310; CryptoMart</span>
+    <a href="index.html">&#x2190; Back to Store</a>
+</div>
+
+<div class="track-container">
+    <div class="track-card">
+        <h1>Track Your Order</h1>
+        <p class="subtitle">Enter your tracking number to see real-time delivery status.</p>
+        <div class="search-box">
+            <input type="text" id="trackInput" placeholder="e.g. ORD-1001" />
+            <button onclick="lookupOrder()">Search</button>
+        </div>
+        <div id="trackResult" class="result"></div>
+        <div id="trackNotFound" class="not-found">
+            <h3>&#x1f50d; Order Not Found</h3>
+            <p>No order matches that tracking number.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function lookupOrder() {
+    const input = document.getElementById('trackInput').value.trim().toUpperCase();
+    const resultDiv = document.getElementById('trackResult');
+    const notFoundDiv = document.getElementById('trackNotFound');
+    resultDiv.classList.remove('show');
+    resultDiv.innerHTML = '';
+    notFoundDiv.classList.remove('show');
+    let data;
+    try {
+        const raw = localStorage.getItem('cryptomart_data');
+        data = raw ? JSON.parse(raw) : { orders: [] };
+    } catch(e) { data = { orders: [] }; }
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlT = urlParams.get('tracking');
+    const search = input || (urlT ? urlT.toUpperCase() : '');
+    const order = data.orders.find(o => o.tracking.toUpperCase() === search);
+    if (!order) { notFoundDiv.classList.add('show'); return; }
+
+    const tl = [];
+    tl.push({
+        label: 'Order Placed',
+        time: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
+        desc: 'Payment: ' + (order.paymentMethod === 'crypto' ? 'Crypto' : 'Cash on Delivery'),
+        completed: true,
+        active: false
+    });
+
+    if (order.paymentStatus === 'confirmed') {
+        tl.push({
+            label: 'Payment Confirmed',
+            time: '',
+            desc: 'Payment verified successfully',
+            completed: true,
+            active: false
+        });
+    }
+
+    if (order.status === 'processing' || order.status === 'shipped') {
+        tl.push({
+            label: 'Processing',
+            time: '',
+            desc: 'Order is being prepared',
+            completed: order.status === 'shipped',
+            active: order.status === 'processing'
+        });
+    }
+
+    if (order.status === 'shipped') {
+        tl.push({
+            label: 'Shipped',
+            time: '',
+            desc: order.deliveryInfo || 'On the way',
+            completed: true,
+            active: false
+        });
+    }
+
+    if (order.status === 'cancelled') {
+        tl.push({
+            label: 'Cancelled',
+            time: '',
+            desc: 'Order has been cancelled',
+            completed: false,
+            active: true
+        });
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    resultDiv.innerHTML = `
+        <div class="tracking-header">
+            <div class="track-num">${order.tracking}</div>
+            <span class="status-badge ${order.status}">${order.status}</span>
+        </div>
+        <div class="timeline">
+            ${tl.map(t => `
+                <div class="timeline-item ${t.completed ? 'completed' : ''} ${t.active ? 'active' : ''}">
+                    <div class="time-label">${t.time}</div>
+                    <div class="event">${t.label}</div>
+                    <div class="desc">${t.desc}</div>
+                </div>
+            `).join('')}
+        </div>
+        <div class="info-grid">
+            <div class="field">
+                <label>Customer</label>
+                <div class="value">${esc(order.customer.name)}</div>
+            </div>
+            <div class="field">
+                <label>Email</label>
+                <div class="value">${esc(order.customer.email)}</div>
+            </div>
+            <div class="field">
+                <label>Delivery</label>
+                <div class="value">${esc(order.customer.address)}<br/>${esc(order.customer.country)}</div>
+            </div>
+            <div class="field">
+                <label>Items</label>
+                <div class="value items-list">${order.items.map(i => `${i.qty}x ${esc(i.productName)}`).join('<br/>')}</div>
+            </div>
+            <div class="field">
+                <label>Total</label>
+                <div class="value">$${order.total.toFixed(2)}</div>
+            </div>
+            <div class="field">
+                <label>Payment</label>
+                <div class="value">${order.paymentMethod === 'crypto' ? 'Crypto (' + order.paymentStatus + ')' : 'Cash on Delivery'}</div>
+            </div>
+            ${order.deliveryInfo ? `
+            <div class="field" style="grid-column:1/-1;">
+                <label>Delivery Info</label>
+                <div class="value">${esc(order.deliveryInfo)}</div>
+            </div>` : ''}
+        </div>`;
+
+    resultDiv.classList.add('show');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get('tracking');
+    if (t) { document.getElementById('trackInput').value = t; lookupOrder(); }
+});
+</script>
+</body>
+</html>
