@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Track Order — CryptoMart</title>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="config.js"></script>
+
 <style>
 :root {
     --primary: #6c5ce7;
@@ -15,7 +21,7 @@
     --gray-light: #dfe6e9;
     --success: #00b894;
     --danger: #e17055;
-    --shadow: 0 8px 32px rgba(0,0,0,0.12);
+    --shadow: 0 8px 32px rgba(0,0,0,0.10);
     --radius: 16px;
     --radius-sm: 8px;
     --transition: 0.3s cubic-bezier(0.4,0,0.2,1);
@@ -25,7 +31,7 @@
 body { font-family:var(--font); background:var(--light); color:var(--dark); min-height:100vh; }
 
 .track-nav {
-    background:#fff; padding:16px 24px; display:flex; align-items:center; gap:12px;
+    background:#fff; padding:16px 28px; display:flex; align-items:center; gap:12px;
     border-bottom:1px solid var(--gray-light); box-shadow:0 2px 8px rgba(0,0,0,0.04);
 }
 .track-nav a { color:var(--primary); font-weight:600; font-size:0.9rem; text-decoration:none; }
@@ -81,6 +87,8 @@ body { font-family:var(--font); background:var(--light); color:var(--dark); min-
 .not-found { text-align:center; padding:40px 0; color:var(--gray); display:none; }
 .not-found.show { display:block; }
 .not-found h3 { font-size:1.2rem; margin-bottom:8px; color:var(--dark); }
+.loading { text-align:center; padding:40px; display:none; }
+.loading.show { display:block; }
 
 @media (max-width:480px) {
     .track-card { padding:24px 16px; }
@@ -100,9 +108,10 @@ body { font-family:var(--font); background:var(--light); color:var(--dark); min-
         <h1>Track Your Order</h1>
         <p class="subtitle">Enter your tracking number to see real-time delivery status.</p>
         <div class="search-box">
-            <input type="text" id="trackInput" placeholder="e.g. ORD-1001" />
+            <input type="text" id="trackInput" placeholder="e.g. ORD-XXXX" />
             <button onclick="lookupOrder()">Search</button>
         </div>
+        <div class="loading" id="loading">Searching...</div>
         <div id="trackResult" class="result"></div>
         <div id="trackNotFound" class="not-found">
             <h3>&#x1f50d; Order Not Found</h3>
@@ -112,122 +121,89 @@ body { font-family:var(--font); background:var(--light); color:var(--dark); min-
 </div>
 
 <script>
-function lookupOrder() {
+async function lookupOrder() {
     const input = document.getElementById('trackInput').value.trim().toUpperCase();
     const resultDiv = document.getElementById('trackResult');
     const notFoundDiv = document.getElementById('trackNotFound');
-    resultDiv.classList.remove('show');
-    resultDiv.innerHTML = '';
+    const loading = document.getElementById('loading');
+    resultDiv.classList.remove('show'); resultDiv.innerHTML = '';
     notFoundDiv.classList.remove('show');
-    let data;
-    try {
-        const raw = localStorage.getItem('cryptomart_data');
-        data = raw ? JSON.parse(raw) : { orders: [] };
-    } catch(e) { data = { orders: [] }; }
+
     const urlParams = new URLSearchParams(window.location.search);
     const urlT = urlParams.get('tracking');
     const search = input || (urlT ? urlT.toUpperCase() : '');
-    const order = data.orders.find(o => o.tracking.toUpperCase() === search);
-    if (!order) { notFoundDiv.classList.add('show'); return; }
+    if (!search) { notFoundDiv.classList.add('show'); return; }
 
-    const tl = [];
-    tl.push({
-        label: 'Order Placed',
-        time: order.createdAt ? new Date(order.createdAt).toLocaleString() : '',
-        desc: 'Payment: ' + (order.paymentMethod === 'crypto' ? 'Crypto' : 'Cash on Delivery'),
-        completed: true,
-        active: false
-    });
+    loading.classList.add('show');
 
-    if (order.paymentStatus === 'confirmed') {
+    try {
+        const snapshot = await db.collection('orders')
+            .where('tracking', '==', search)
+            .get();
+
+        loading.classList.remove('show');
+
+        if (snapshot.empty) {
+            notFoundDiv.classList.add('show');
+            return;
+        }
+
+        const order = snapshot.docs[0].data();
+        order.id = snapshot.docs[0].id;
+
+        const tl = [];
         tl.push({
-            label: 'Payment Confirmed',
-            time: '',
-            desc: 'Payment verified successfully',
-            completed: true,
-            active: false
+            label: 'Order Placed',
+            time: order.createdAt ? new Date(order.createdAt.seconds * 1000).toLocaleString() : '',
+            desc: 'Payment: ' + (order.paymentMethod === 'crypto' ? 'Crypto' : 'Cash on Delivery'),
+            completed: true, active: false
         });
+
+        if (order.paymentStatus === 'confirmed') {
+            tl.push({ label: 'Payment Confirmed', time: '', desc: 'Payment verified successfully', completed: true, active: false });
+        }
+
+        if (order.status === 'processing' || order.status === 'shipped') {
+            tl.push({
+                label: 'Processing', time: '', desc: 'Order is being prepared',
+                completed: order.status === 'shipped', active: order.status === 'processing'
+            });
+        }
+
+        if (order.status === 'shipped') {
+            tl.push({ label: 'Shipped', time: '', desc: order.deliveryInfo || 'On the way', completed: true, active: false });
+        }
+
+        if (order.status === 'cancelled') {
+            tl.push({ label: 'Cancelled', time: '', desc: 'Order has been cancelled', completed: false, active: true });
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        resultDiv.innerHTML = `
+            <div class="tracking-header">
+                <div class="track-num">${order.tracking}</div>
+                <span class="status-badge ${order.status}">${order.status}</span>
+            </div>
+            <div class="timeline">${tl.map(t => `<div class="timeline-item ${t.completed?'completed':''} ${t.active?'active':''}"><div class="time-label">${t.time}</div><div class="event">${t.label}</div><div class="desc">${t.desc}</div></div>`).join('')}</div>
+            <div class="info-grid">
+                <div class="field"><label>Customer</label><div class="value">${esc(order.customer.name)}</div></div>
+                <div class="field"><label>Email</label><div class="value">${esc(order.customer.email)}</div></div>
+                <div class="field"><label>Delivery</label><div class="value">${esc(order.customer.address)}<br/>${esc(order.customer.country)}</div></div>
+                <div class="field"><label>Items</label><div class="value items-list">${order.items.map(i=>`${i.qty}x ${esc(i.productName)}`).join('<br/>')}</div></div>
+                <div class="field"><label>Total</label><div class="value">$${(order.total||0).toFixed(2)}</div></div>
+                <div class="field"><label>Payment</label><div class="value">${order.paymentMethod==='crypto'?'Crypto ('+order.paymentStatus+')':'Cash on Delivery'}</div></div>
+                ${order.deliveryInfo ? `<div class="field" style="grid-column:1/-1;"><label>Delivery Info</label><div class="value">${esc(order.deliveryInfo)}</div></div>` : ''}
+            </div>`;
+
+        resultDiv.classList.add('show');
+
+    } catch (error) {
+        loading.classList.remove('show');
+        console.error('Error looking up order:', error);
+        notFoundDiv.innerHTML = '<h3>&#x26a0;&#xfe0f; Error</h3><p>Could not search. Check your connection and Firebase config.</p>';
+        notFoundDiv.classList.add('show');
     }
-
-    if (order.status === 'processing' || order.status === 'shipped') {
-        tl.push({
-            label: 'Processing',
-            time: '',
-            desc: 'Order is being prepared',
-            completed: order.status === 'shipped',
-            active: order.status === 'processing'
-        });
-    }
-
-    if (order.status === 'shipped') {
-        tl.push({
-            label: 'Shipped',
-            time: '',
-            desc: order.deliveryInfo || 'On the way',
-            completed: true,
-            active: false
-        });
-    }
-
-    if (order.status === 'cancelled') {
-        tl.push({
-            label: 'Cancelled',
-            time: '',
-            desc: 'Order has been cancelled',
-            completed: false,
-            active: true
-        });
-    }
-
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-    resultDiv.innerHTML = `
-        <div class="tracking-header">
-            <div class="track-num">${order.tracking}</div>
-            <span class="status-badge ${order.status}">${order.status}</span>
-        </div>
-        <div class="timeline">
-            ${tl.map(t => `
-                <div class="timeline-item ${t.completed ? 'completed' : ''} ${t.active ? 'active' : ''}">
-                    <div class="time-label">${t.time}</div>
-                    <div class="event">${t.label}</div>
-                    <div class="desc">${t.desc}</div>
-                </div>
-            `).join('')}
-        </div>
-        <div class="info-grid">
-            <div class="field">
-                <label>Customer</label>
-                <div class="value">${esc(order.customer.name)}</div>
-            </div>
-            <div class="field">
-                <label>Email</label>
-                <div class="value">${esc(order.customer.email)}</div>
-            </div>
-            <div class="field">
-                <label>Delivery</label>
-                <div class="value">${esc(order.customer.address)}<br/>${esc(order.customer.country)}</div>
-            </div>
-            <div class="field">
-                <label>Items</label>
-                <div class="value items-list">${order.items.map(i => `${i.qty}x ${esc(i.productName)}`).join('<br/>')}</div>
-            </div>
-            <div class="field">
-                <label>Total</label>
-                <div class="value">$${order.total.toFixed(2)}</div>
-            </div>
-            <div class="field">
-                <label>Payment</label>
-                <div class="value">${order.paymentMethod === 'crypto' ? 'Crypto (' + order.paymentStatus + ')' : 'Cash on Delivery'}</div>
-            </div>
-            ${order.deliveryInfo ? `
-            <div class="field" style="grid-column:1/-1;">
-                <label>Delivery Info</label>
-                <div class="value">${esc(order.deliveryInfo)}</div>
-            </div>` : ''}
-        </div>`;
-
-    resultDiv.classList.add('show');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
