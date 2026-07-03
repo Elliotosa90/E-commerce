@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Login — CryptoMart</title>
+<!-- Firebase v8 compat — correct CDN URLs with version numbers -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="config.js"></script>
@@ -42,10 +43,13 @@ body { font-family:'Segoe UI',sans-serif; background:#f8f9fa; min-height:100vh; 
 </div>
 
 <script>
+// Wait for Firebase to be fully loaded before defining the function
 function adminLogin() {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value.trim();
     const errorDiv = document.getElementById('loginError');
+    const btn = document.querySelector('.btn');
+    
     errorDiv.style.display = 'none';
 
     if (!email || !password) {
@@ -54,28 +58,45 @@ function adminLogin() {
         return;
     }
 
-    document.querySelector('.btn').textContent = 'Signing in...';
-    document.querySelector('.btn').disabled = true;
+    // Safety check: make sure Firebase Auth is available
+    if (typeof firebase === 'undefined' || !firebase.auth) {
+        errorDiv.textContent = 'Firebase failed to load. Check your internet connection or ad blocker.';
+        errorDiv.style.display = 'block';
+        btn.textContent = 'Sign In';
+        btn.disabled = false;
+        return;
+    }
+
+    btn.textContent = 'Signing in...';
+    btn.disabled = true;
 
     auth.signInWithEmailAndPassword(email, password)
         .then((userCredential) => {
-            // Store session
             sessionStorage.setItem('adminLoggedIn', 'true');
             window.location.href = 'dashboard.html';
         })
         .catch((error) => {
-            document.querySelector('.btn').textContent = 'Sign In';
-            document.querySelector('.btn').disabled = false;
-            errorDiv.textContent = error.message === 'There is no user record corresponding to this identifier. Please try again.'
-                ? 'No admin account found with this email.'
-                : error.message || 'Invalid credentials.';
+            btn.textContent = 'Sign In';
+            btn.disabled = false;
+            
+            // Clean up Firebase error messages
+            const msg = error.message || '';
+            if (msg.includes('user record') || msg.includes('user-not-found')) {
+                errorDiv.textContent = 'No admin account found with this email.';
+            } else if (msg.includes('wrong password') || msg.includes('invalid-password') || msg.includes('invalid-credential')) {
+                errorDiv.textContent = 'Incorrect password.';
+            } else if (msg.includes('too-many-requests')) {
+                errorDiv.textContent = 'Too many attempts. Please try again later.';
+            } else {
+                errorDiv.textContent = msg || 'Invalid credentials.';
+            }
             errorDiv.style.display = 'block';
         });
 }
 
-// If already logged in, redirect to dashboard
+// Only redirect if we're not already on the login page (prevents redirect loops)
 auth.onAuthStateChanged((user) => {
-    if (user) {
+    if (user && !window.location.href.includes('admin.html')) {
         window.location.href = 'dashboard.html';
     }
 });
