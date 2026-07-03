@@ -6,12 +6,12 @@
 // ================================================================
 
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+   apiKey: "AIzaSyDVgP_Ma2TdLRw5luaDod8808L5x8We2Cg",
+    authDomain: "e-commerce-3b0d8.firebaseapp.com",
+    projectId: "e-commerce-3b0d8",
+    storageBucket: "e-commerce-3b0d8.firebasestorage.app",
+    messagingSenderId: "392057419128",
+    appId: "1:392057419128:web:5fed61b34921efc25c048d"
 };
 
 // Initialize Firebase
