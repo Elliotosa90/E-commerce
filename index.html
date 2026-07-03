@@ -1175,4 +1175,55 @@ function cancelCryptoPayment() {
     closeCrypto();
     // Cart is NOT cleared — user can try again
 }
+async function confirmCryptoPayment() {
+    if (!currentCryptoOrder) return;
+    clearInterval(cryptoInterval);
 
+    try {
+        await db.collection('orders').doc(currentCryptoOrder.orderId).update({
+            paymentStatus: 'confirmed',
+            status: 'processing'
+        });
+        // Clear cart only on successful payment
+        cart = [];
+        saveCart();
+        const tn = currentCryptoOrder.trackingNum;
+        closeCrypto();
+        showSuccess(tn);
+    } catch (error) {
+        console.error('Error confirming payment:', error);
+        showToast('Error confirming payment. Please try again.');
+    }
+}
+
+/* ============================================================
+   SUCCESS MODAL
+   ============================================================ */
+function showSuccess(trackingNum) {
+    document.getElementById('successTracking').textContent = trackingNum;
+    document.getElementById('successOverlay').classList.add('open');
+}
+
+function closeSuccess() {
+    document.getElementById('successOverlay').classList.remove('open');
+}
+
+/* ============================================================
+   TRACKING
+   ============================================================ */
+function trackOrder() {
+    const input = document.getElementById('trackingInput').value.trim();
+    if (!input) { showToast('Please enter a tracking number.'); return; }
+    window.location.href = 'track.html?tracking=' + encodeURIComponent(input);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    updateCartUI();
+});
+</script>
+</body>
+</html>
